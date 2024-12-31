@@ -303,4 +303,39 @@ void main() {
       throwsA(isA<Exception>()),
     );
   });
+
+  test('orderBy', () async {
+    final mockQuery = MockQuery();
+    final mockQuerySnapshot = MockQuerySnapshot();
+
+    when(mockQuery.get())
+        .thenAnswer((_) async => Future.value(mockQuerySnapshot));
+    when(convertedMockCollectionReference.orderBy('age',
+            descending: anyNamed('descending')))
+        .thenReturn(mockQuery);
+    when(mockQuery.limit(10)).thenReturn(mockQuery);
+
+    final list = List.generate(100, (i) => {'age': i}).map((data) {
+      final mockDocumentSnapshot = MockQueryDocumentSnapshot();
+      when(mockDocumentSnapshot.get('age')).thenReturn(data['age']);
+      when(mockDocumentSnapshot.data()).thenReturn(data);
+      return mockDocumentSnapshot;
+    }).toList();
+
+    when(mockQuerySnapshot.docs).thenReturn(list.sublist(0, 10));
+
+    final controller = FirestorePagingController.withoutType(
+      basePath: 'users',
+      firestore: mockFirestore,
+      orderBy: 'age',
+    );
+
+    controller.notifyPageRequestListeners(0);
+
+    await Future.delayed(const Duration(milliseconds: 10));
+
+    expect(controller.error, isNull);
+    expect(controller.itemList, list.sublist(0, 10));
+    expect(controller.value.nextPageKey, 1);
+  });
 }

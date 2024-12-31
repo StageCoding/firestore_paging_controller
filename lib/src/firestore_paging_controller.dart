@@ -10,15 +10,18 @@ typedef FromMap<T> = T Function(StringMap);
 /// paginates them to be used with infinite_scroll_pagination views, like [PagedListView].
 ///
 /// Parameters:
-/// - [basePath] - The base path to the collection in Firestore
-/// - [firestore] - The Firestore instance to use. If not provided, it will use the default instance.
-/// - [queryBuilders] - A list of query builders. If you want to fetch all items, leave it null.
-/// - [fromMap] - A function to convert a Firestore document to the desired item type.
-/// - [pageSize] - The number of items to fetch per page. Default is 10.
-/// - [orderBy] - The field to order the items by. It can't be a documentId because
+/// - `basePath` - The base path to the collection in Firestore
+/// - `firestore` - The Firestore instance to use. If not provided, it will use the default instance.
+/// - `queryBuilders` - A list of query builders. If you want to fetch all items, leave it null.
+/// - `fromMap` - A function to convert a Firestore document to the desired item type.
+/// - `pageSize` - The number of items to fetch per page. Default is 10. When there are multiple
+/// queryBuilders, the pageSize is the total number of items to fetch per query. If
+/// more than one query is provided, there is no guarantee that each query will have the same number of items to show at
+/// the same time. Every batch will have from 0 to pageSize * queryBuilders.length items
+/// - `orderBy` - The field to order the items by. It can't be a documentId because
 /// the cursor is based on the last document fetched, and we use startAfterDocument
 /// to fetch the next page.
-/// - [orderByDescending] - Whether to order the items in descending order. Default is false.
+/// - `orderByDescending` - Whether to order the items in descending order. Default is false.
 /// {@endtemplate}
 class FirestorePagingController<ItemType>
     extends PagingController<int, QueryDocumentSnapshot<ItemType>> {
@@ -141,8 +144,8 @@ class FirestorePagingController<ItemType>
           final itemsToWait = results[i].where((e) {
             final value = e.get(orderBy!);
             return orderByDescending
-                ? value.compareTo(pivotFieldValue.elementAt(i)) >= 0
-                : value.compareTo(pivotFieldValue.elementAt(i)) <= 0;
+                ? value.compareTo(pivotFieldValue.elementAt(i)) < 0
+                : value.compareTo(pivotFieldValue.elementAt(i)) > 0;
           }).toList();
 
           _queryWaitingResults[i].addAll(itemsToWait);
