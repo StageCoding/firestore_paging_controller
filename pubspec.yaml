@@ -1,0 +1,19 @@
+name: firestore_paging_controller
+description: "Lazily load and display pages of items as the user scrolls down your screen, using Firestore with some enhancements."
+version: 0.0.1
+homepage: https://github.com/StageCoding/firestore_paging_controller
+
+environment:
+  sdk: ^3.5.3
+  flutter: ">=1.17.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  infinite_scroll_pagination: ^4.1.0
+  cloud_firestore: ^5.6.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
