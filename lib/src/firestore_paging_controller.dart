@@ -2,15 +2,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firestore_paging_controller/src/data_cursor.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 
-typedef FromMap<T> = T Function(Map<String, dynamic>);
+typedef StringMap = Map<String, dynamic>;
+typedef FromMap<T> = T Function(StringMap);
 
-/// Has the same interface as [FirestorePagingController], but accepts multiple queries
-/// which mimics the OR or union operator. All the queries will feed into one
-/// list, which is accessible through the getter.
-/// It can be used with [PagedListView] for infinite scroll, or with the
-/// [AppLoadMoreList] for user click to load infinite load.
+/// {@template firestore_paging_controller}
+/// Creates a [FirestorePagingController] that fetches items from Firestore and
+/// paginates them to be used with infinite_scroll_pagination views, like [PagedListView].
 ///
-/// Warning: Sorting is not supported. If you want that, use Algolia.
+/// Parameters:
+/// - [basePath] - The base path to the collection in Firestore
+/// - [firestore] - The Firestore instance to use. If not provided, it will use the default instance.
+/// - [queryBuilders] - A list of query builders. If you want to fetch all items, leave it null.
+/// - [fromMap] - A function to convert a Firestore document to the desired item type.
+/// - [pageSize] - The number of items to fetch per page. Default is 10.
+/// {@endtemplate}
 class FirestorePagingController<ItemType>
     extends PagingController<int, QueryDocumentSnapshot<ItemType>> {
   /// The base path to the collection in Firestore
@@ -19,45 +24,51 @@ class FirestorePagingController<ItemType>
   /// The Firestore instance to use. If not provided, it will use the default instance.
   final FirebaseFirestore firestore;
 
-  final FromMap<ItemType>? fromMap;
+  final FromMap<ItemType> fromMap;
 
   late final List<DataCursor<ItemType>> _cursors;
   final int pageSize;
 
-  static _allItemsQuery<ItemType>() => (Query<ItemType> query) => query;
+  /// {@macro firestore_paging_controller}
+  static FirestorePagingController<StringMap> withoutType({
+    required String basePath,
+    FirebaseFirestore? firestore,
+    List<Query<StringMap> Function(Query<StringMap> query)>? queryBuilders,
+    int pageSize = 10,
+  }) {
+    return FirestorePagingController<StringMap>.converted(
+      basePath: basePath,
+      firestore: firestore,
+      queryBuilders: queryBuilders,
+      fromMap: (data) => data,
+      pageSize: pageSize,
+    );
+  }
 
-  /// Creates a [FirestorePagingController] that fetches items from Firestore and
-  /// paginates them to be used with infinite_scroll_pagination views, like [PagedListView].
-  ///
-  /// Parameters:
-  /// - [basePath] - The base path to the collection in Firestore
-  /// - [firestore] - The Firestore instance to use. If not provided, it will use the default instance.
-  /// - [queryBuilders] - A list of query builders. If you want to fetch all items, leave it null.
-  FirestorePagingController({
+  /// {@macro firestore_paging_controller}
+  FirestorePagingController.converted({
     required this.basePath,
     FirebaseFirestore? firestore,
-    List<Query<ItemType> Function(Query<ItemType> query)>? queryBuilders,
-    this.fromMap,
+    List<Query<ItemType> Function(CollectionReference<ItemType> query)>?
+        queryBuilders,
+    required this.fromMap,
     this.pageSize = 10,
   })  : assert(
-          ItemType is Map<String, dynamic> || fromMap != null,
-          'fromMap is required when ItemType is not Map<String, dynamic>',
-        ),
-        assert(
           queryBuilders?.isEmpty != true,
           'At least one queryBuilder is required. If you want to fetch all items, leave it null.',
         ),
         assert(pageSize > 0),
         firestore = firestore ?? FirebaseFirestore.instance,
         super(firstPageKey: 0) {
-    queryBuilders ??= [_allItemsQuery<ItemType>()];
+    // If user didn't provide any queryBuilders, we will fetch all items
+    queryBuilders ??= [(query) => query];
 
     _cursors = queryBuilders.map(
       (queryBuilder) {
         final query = queryBuilder(
           this.firestore.collection(basePath).withConverter<ItemType>(
                 fromFirestore: (snapshot, _) =>
-                    fromMap?.call(snapshot.data()!) ??
+                    fromMap.call(snapshot.data()!) ??
                     snapshot.data() as ItemType,
                 toFirestore: (item, _) => throw Exception(
                     'You cannot write to Firestore in FirestorePagingController'),
