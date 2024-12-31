@@ -338,4 +338,81 @@ void main() {
     expect(controller.itemList, list.sublist(0, 10));
     expect(controller.value.nextPageKey, 1);
   });
+
+  test('order multiple queries', () async {
+    final list = List.generate(
+      100,
+      (i) => {
+        'age': i,
+        'gender': i % 2 == 0 ? 'male' : 'female',
+        'country': switch (i % 3) {
+          0 => 'USA',
+          1 => 'UK',
+          _ => 'Canada',
+        },
+      },
+    ).map((data) {
+      final mockDocumentSnapshot = MockQueryDocumentSnapshot();
+      when(mockDocumentSnapshot.get('age')).thenReturn(data['age']);
+      when(mockDocumentSnapshot.data()).thenReturn(data);
+      return mockDocumentSnapshot;
+    }).toList();
+
+    final controller = FirestorePagingController.withoutType(
+      basePath: 'users',
+      firestore: mockFirestore,
+      queryBuilders: [
+        (query) {
+          final mockQuery = MockQuery();
+          final snapshot = MockQuerySnapshot();
+
+          when(snapshot.docs).thenReturn(list
+              .where((e) => e.data()['gender'] == 'male')
+              .take(10)
+              .toList());
+
+          when(mockQuery.get()).thenAnswer((_) async => Future.value(snapshot));
+
+          when(convertedMockCollectionReference.orderBy('age',
+                  descending: true))
+              .thenReturn(mockQuery);
+
+          when(mockQuery.limit(10)).thenReturn(mockQuery);
+
+          return query;
+        },
+        (query) {
+          final mockQuery = MockQuery();
+          final snapshot = MockQuerySnapshot();
+
+          when(snapshot.docs).thenReturn(list
+              .where((e) => e.data()['country'] == 'UK')
+              .skip(18)
+              .take(10)
+              .toList());
+
+          when(mockQuery.get()).thenAnswer((_) async => Future.value(snapshot));
+
+          when(convertedMockCollectionReference.orderBy('age',
+                  descending: true))
+              .thenReturn(mockQuery);
+
+          when(mockQuery.limit(10)).thenReturn(mockQuery);
+
+          return query;
+        },
+      ],
+      orderBy: 'age',
+      orderByDescending: true,
+    );
+
+    controller.notifyPageRequestListeners(0);
+
+    await Future.delayed(const Duration(milliseconds: 10));
+
+    expect(controller.error, isNull);
+    expect(controller.itemList,
+        list.where((e) => e.data()['gender'] == 'male').take(10).toList());
+    expect(controller.value.nextPageKey, 1);
+  });
 }

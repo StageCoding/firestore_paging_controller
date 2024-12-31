@@ -47,7 +47,8 @@ class FirestorePagingController<ItemType>
   static FirestorePagingController<StringMap> withoutType({
     required String basePath,
     FirebaseFirestore? firestore,
-    List<Query<StringMap> Function(Query<StringMap> query)>? queryBuilders,
+    List<Query<StringMap> Function(CollectionReference<StringMap> query)>?
+        queryBuilders,
     int pageSize = 10,
     String? orderBy,
     bool orderByDescending = false,
@@ -96,7 +97,7 @@ class FirestorePagingController<ItemType>
 
         assert(
           List.from(query.parameters['orderBy']).isEmpty,
-          'Sorting is not supported in FirestoreUnionPagingController',
+          'Ordering is done through orderBy in FirestoreUnionPagingController',
         );
 
         assert(
@@ -117,35 +118,43 @@ class FirestorePagingController<ItemType>
 
   Future<void> _fetch(int pageKey) async {
     try {
-      final newResults = await _cursors
+      var results = await _cursors
           .asMap()
           .map((i, e) => MapEntry(
               i, e.fetchNextPage(pageSize - _queryWaitingResults[i].length)))
           .values
           .wait;
 
-      final results = newResults
-          .asMap()
-          .map((i, e) => MapEntry(i, [
-                ..._queryWaitingResults[i],
-                ...e,
-              ]))
-          .values
-          .toList();
-
       if (orderBy != null) {
+        // Add items that are waiting to be displayed in the next pages
+        results = results
+            .asMap()
+            .map((i, e) => MapEntry(i, [
+                  ..._queryWaitingResults[i],
+                  ...e,
+                ]))
+            .values
+            .toList();
+
         // Value of the field we are ordering by in the last document of each cursor
         final pivotFieldValue = results
             .map((e) => e.lastOrNull)
             .whereType<QueryDocumentSnapshot<ItemType>>()
-            .map((e) => e.get(orderBy!));
+            .map((e) => e.get(orderBy!))
+            .reduce((value, element) {
+          if (orderByDescending) {
+            return value.compareTo(element) < 0 ? value : element;
+          } else {
+            return value.compareTo(element) > 0 ? value : element;
+          }
+        });
 
         for (var i = 0; i < results.length; i++) {
           final itemsToWait = results[i].where((e) {
             final value = e.get(orderBy!);
             return orderByDescending
-                ? value.compareTo(pivotFieldValue.elementAt(i)) < 0
-                : value.compareTo(pivotFieldValue.elementAt(i)) > 0;
+                ? value.compareTo(pivotFieldValue) > 0
+                : value.compareTo(pivotFieldValue) < 0;
           }).toList();
 
           _queryWaitingResults[i].addAll(itemsToWait);
@@ -153,7 +162,7 @@ class FirestorePagingController<ItemType>
         }
       }
 
-      final isLastPage = !results.any((result) => result.length == pageSize);
+      final isLastPage = results.every((result) => result.length < pageSize);
 
       final newItems = results
           .expand((e) => e)
