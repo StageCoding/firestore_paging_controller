@@ -12,19 +12,21 @@ class DataCursor<T> {
 
   DocumentSnapshot? _lastVisible;
 
-  Future<List<QueryDocumentSnapshot<T>>> fetchNextPage() async {
+  Future<List<QueryDocumentSnapshot<T>>> fetchNextPage(int items) async {
+    if (items <= 0) return [];
+
     if (isLoading) {
       throw 'DataCursor is already fetching';
     }
 
     _isLoading = true;
 
-    final next = _lastVisible == null
-        ? _query
-        : _query.startAfterDocument(_lastVisible!);
+    var query = _query.limit(items);
+
+    if (_lastVisible != null) query = query.startAfterDocument(_lastVisible!);
 
     try {
-      final response = await next.get();
+      final response = await query.get();
 
       if (response.docs.isEmpty) return [];
 
