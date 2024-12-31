@@ -12,15 +12,9 @@ class DataCursor<T> {
 
   DocumentSnapshot? _lastVisible;
 
-  var isEverythingLoaded = false;
-
   Future<List<QueryDocumentSnapshot<T>>> fetchNextPage() async {
     if (isLoading) {
       throw 'DataCursor is already fetching';
-    }
-
-    if (isEverythingLoaded) {
-      return [];
     }
 
     _isLoading = true;
@@ -32,10 +26,7 @@ class DataCursor<T> {
     try {
       final response = await next.get();
 
-      if (response.docs.isEmpty) {
-        isEverythingLoaded = true;
-        return [];
-      }
+      if (response.docs.isEmpty) return [];
 
       _lastVisible = response.docs.last;
 

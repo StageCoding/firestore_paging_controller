@@ -67,9 +67,7 @@ class FirestorePagingController<ItemType>
       (queryBuilder) {
         final query = queryBuilder(
           this.firestore.collection(basePath).withConverter<ItemType>(
-                fromFirestore: (snapshot, _) =>
-                    fromMap.call(snapshot.data()!) ??
-                    snapshot.data() as ItemType,
+                fromFirestore: (snapshot, _) => fromMap.call(snapshot.data()!),
                 toFirestore: (item, _) => throw Exception(
                     'You cannot write to Firestore in FirestorePagingController'),
               ),
@@ -101,7 +99,7 @@ class FirestorePagingController<ItemType>
       final newItems = results
           .expand((e) => e)
           .toSet()
-          .where((item) => value.itemList?.contains(item) != true)
+          .where((item) => value.itemList?.any((e) => e.id == item.id) != true)
           .toList();
 
       if (isLastPage) {
