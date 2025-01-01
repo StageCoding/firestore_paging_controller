@@ -21,11 +21,14 @@ To use this package, you need to create a `FirestorePagingController` and (optio
 import 'package:firestore_paging_controller/firestore_paging_controller.dart';
 
 final controller = FirestorePagingController(
-  queries: [
+  basePath: 'posts',
+  queryBuilders: [
     (query) => query.where('creatorId', isEqualTo: userId),
     (query) => query.where('taggedUserId', isEqualTo: userId),
   ],
-  itemsPerPage: 10,
+  orderBy: 'createdAt',
+  orderByDescending: true,
+  pageSize: 10,
 );
 ```
 
@@ -36,11 +39,8 @@ After creating the controller, you can use it in a widget from the [`infinite_sc
 ```dart
 PagedListView<int, T>(
   pagingController: controller,
-  padding: const EdgeInsets.only(top: 10),
   builderDelegate: CustomPagedChildBuilderDelegate<T>(
-    itemBuilder: (context, item, index) {
-      return VideoActivityWidget<T, Repository>(videoActivity: item);
-    },
+    itemBuilder: (context, item, index) => Post(item),
   ),
 );
 ```
