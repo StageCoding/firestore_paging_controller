@@ -538,7 +538,7 @@ void main() {
     ]);
   });
 
-  test('order multiple queries - interlocking - twice', () async {
+  test('order multiple queries - interlocking - multiple fetches', () async {
     final mockQuery1 = MockQuery();
     final snapshot1 = MockQuerySnapshot();
     when(mockQuery1.get()).thenAnswer((_) async => Future.value(snapshot1));
@@ -836,6 +836,321 @@ void main() {
       list[17],
       list[18],
       list[19],
+    ]);
+    expect(controller.value.nextPageKey, isNull);
+  });
+
+  test('order multiple queries - interlocking - descending', () async {
+    final mockQuery1 = MockQuery();
+    final snapshot1 = MockQuerySnapshot();
+    when(mockQuery1.get()).thenAnswer((_) async => Future.value(snapshot1));
+    when(mockQuery1.parameters).thenReturn({'orderBy': [], 'limit': []});
+    when(mockQuery1.orderBy('age', descending: true)).thenReturn(mockQuery1);
+    when(mockQuery1.startAfterDocument(any)).thenReturn(mockQuery1);
+
+    final mockQuery2 = MockQuery();
+    final snapshot2 = MockQuerySnapshot();
+    when(mockQuery2.get()).thenAnswer((_) async => Future.value(snapshot2));
+    when(mockQuery2.parameters).thenReturn({'orderBy': [], 'limit': []});
+    when(mockQuery2.orderBy('age', descending: true)).thenReturn(mockQuery2);
+    when(mockQuery2.startAfterDocument(any)).thenReturn(mockQuery2);
+
+    final mockQuery3 = MockQuery();
+    final snapshot3 = MockQuerySnapshot();
+    when(mockQuery3.get()).thenAnswer((_) async => Future.value(snapshot3));
+    when(mockQuery3.parameters).thenReturn({'orderBy': [], 'limit': []});
+    when(mockQuery3.orderBy('age', descending: true)).thenReturn(mockQuery3);
+    when(mockQuery3.startAfterDocument(any)).thenReturn(mockQuery3);
+
+    final list = List.generate(
+      20,
+      (i) => {
+        'age': i,
+        'gender': i % 2 == 0 ? 'male' : 'female',
+        'country': switch (i % 3) {
+          0 => 'USA',
+          1 => 'UK',
+          _ => 'Canada',
+        },
+      },
+    ).map((data) {
+      final mockDocumentSnapshot = MockQueryDocumentSnapshot();
+      when(mockDocumentSnapshot.id).thenReturn(data['age'].toString());
+      when(mockDocumentSnapshot.get('age')).thenReturn(data['age']);
+      when(mockDocumentSnapshot.data()).thenReturn(data);
+      return mockDocumentSnapshot;
+    }).toList();
+
+    final reversedList = list.reversed.toList();
+
+    final controller = FirestorePagingController.withoutType(
+      basePath: 'users',
+      firestore: mockFirestore,
+      queryBuilders: [
+        (query) => mockQuery1,
+        (query) => mockQuery2,
+        (query) => mockQuery3,
+      ],
+      orderBy: 'age',
+      pageSize: 3,
+      orderByDescending: true,
+    );
+
+    when(snapshot1.docs).thenReturn(reversedList
+        .where((e) => e.data()['gender'] == 'female')
+        .take(3)
+        .toList());
+    when(mockQuery1.limit(any)).thenAnswer((invocation) {
+      assert(invocation.positionalArguments[0] == 3);
+      return mockQuery1;
+    });
+
+    when(snapshot2.docs).thenReturn(reversedList
+        .where((e) => e.data()['country'] == 'USA')
+        .skip(1)
+        .take(3)
+        .toList());
+    when(mockQuery2.limit(any)).thenAnswer((invocation) {
+      assert(invocation.positionalArguments[0] == 3);
+      return mockQuery2;
+    });
+
+    when(snapshot3.docs).thenReturn(
+        reversedList.where((e) => e.data()['age'] > 10).take(3).toList());
+    when(mockQuery3.limit(any)).thenAnswer((invocation) {
+      assert(invocation.positionalArguments[0] == 3);
+      return mockQuery3;
+    });
+
+    controller.notifyPageRequestListeners(0);
+
+    await Future.delayed(const Duration(milliseconds: 10));
+
+    // First query: 19, 17, 15
+    // Second query: 15, 12, 9
+    // Third query: 19, 18, 17
+
+    expect(controller.error, isNull);
+    expect(controller.itemList, [
+      list[19],
+      list[18],
+      list[17],
+    ]);
+
+    when(snapshot1.docs).thenReturn(reversedList
+        .where((e) => e.data()['gender'] == 'female')
+        .skip(3)
+        .take(2)
+        .toList());
+    when(mockQuery1.limit(any)).thenAnswer((invocation) {
+      assert(invocation.positionalArguments[0] == 2);
+      return mockQuery1;
+    });
+
+    when(snapshot2.docs).thenReturn(reversedList
+        .where((e) => e.data()['country'] == 'USA')
+        .skip(1)
+        .skip(3)
+        .take(0)
+        .toList());
+    when(mockQuery2.limit(any)).thenAnswer((invocation) {
+      assert(invocation.positionalArguments[0] == 0);
+      return mockQuery2;
+    });
+
+    when(snapshot3.docs).thenReturn(reversedList
+        .where((e) => e.data()['age'] > 10)
+        .skip(3)
+        .take(3)
+        .toList());
+    when(mockQuery3.limit(any)).thenAnswer((invocation) {
+      assert(invocation.positionalArguments[0] == 3);
+      return mockQuery3;
+    });
+
+    controller.notifyPageRequestListeners(1);
+
+    await Future.delayed(const Duration(milliseconds: 10));
+
+    // First query: 15, 13, 11
+    // Second query: 15, 12, 9
+    // Third query: 16, 15, 14
+
+    expect(controller.error, isNull);
+    expect(controller.itemList, [
+      list[19],
+      list[18],
+      list[17],
+      list[16],
+      list[15],
+      list[14],
+    ]);
+
+    when(snapshot1.docs).thenReturn(reversedList
+        .where((e) => e.data()['gender'] == 'female')
+        .skip(5)
+        .take(1)
+        .toList());
+    when(mockQuery1.limit(any)).thenAnswer((invocation) {
+      assert(invocation.positionalArguments[0] == 1);
+      return mockQuery1;
+    });
+
+    when(snapshot2.docs).thenReturn(reversedList
+        .where((e) => e.data()['country'] == 'USA')
+        .skip(1)
+        .skip(3)
+        .take(1)
+        .toList());
+    when(mockQuery2.limit(any)).thenAnswer((invocation) {
+      assert(invocation.positionalArguments[0] == 1);
+      return mockQuery2;
+    });
+
+    when(snapshot3.docs).thenReturn(reversedList
+        .where((e) => e.data()['age'] > 10)
+        .skip(6)
+        .take(3)
+        .toList());
+    when(mockQuery3.limit(any)).thenAnswer((invocation) {
+      assert(invocation.positionalArguments[0] == 3);
+      return mockQuery3;
+    });
+
+    controller.notifyPageRequestListeners(2);
+
+    await Future.delayed(const Duration(milliseconds: 10));
+
+    // First query 13, 11, 9
+    // Second query: 12, 9, 6
+    // Third query: 13, 12, 11
+
+    expect(controller.error, isNull);
+    expect(controller.itemList, [
+      list[19],
+      list[18],
+      list[17],
+      list[16],
+      list[15],
+      list[14],
+      list[13],
+      list[12],
+      list[11],
+    ]);
+
+    when(snapshot1.docs).thenReturn(reversedList
+        .where((e) => e.data()['gender'] == 'female')
+        .skip(6)
+        .take(2)
+        .toList());
+    when(mockQuery1.limit(any)).thenAnswer((invocation) {
+      assert(invocation.positionalArguments[0] == 2);
+      return mockQuery1;
+    });
+
+    when(snapshot2.docs).thenReturn(reversedList
+        .where((e) => e.data()['country'] == 'USA')
+        .skip(1)
+        .skip(4)
+        .take(1)
+        .toList());
+    when(mockQuery2.limit(any)).thenAnswer((invocation) {
+      assert(invocation.positionalArguments[0] == 1);
+      return mockQuery2;
+    });
+
+    when(snapshot3.docs).thenReturn(reversedList
+        .where((e) => e.data()['age'] > 10)
+        .skip(9)
+        .take(3)
+        .toList());
+    when(mockQuery3.limit(any)).thenAnswer((invocation) {
+      assert(invocation.positionalArguments[0] == 3);
+      return mockQuery3;
+    });
+
+    controller.notifyPageRequestListeners(3);
+
+    await Future.delayed(const Duration(milliseconds: 10));
+
+    // First query 9, 7, 5
+    // Second query: 9, 6, 3
+    // Third query: (no more items)
+
+    expect(controller.error, isNull);
+    expect(controller.itemList, [
+      list[19],
+      list[18],
+      list[17],
+      list[16],
+      list[15],
+      list[14],
+      list[13],
+      list[12],
+      list[11],
+      list[9],
+      list[7],
+      list[6],
+      list[5],
+    ]);
+
+    when(snapshot1.docs).thenReturn(reversedList
+        .where((e) => e.data()['gender'] == 'female')
+        .skip(8)
+        .take(3)
+        .toList());
+    when(mockQuery1.limit(any)).thenAnswer((invocation) {
+      assert(invocation.positionalArguments[0] == 3);
+      return mockQuery1;
+    });
+
+    when(snapshot2.docs).thenReturn(reversedList
+        .where((e) => e.data()['country'] == 'USA')
+        .skip(1)
+        .skip(5)
+        .take(2)
+        .toList());
+    when(mockQuery2.limit(any)).thenAnswer((invocation) {
+      assert(invocation.positionalArguments[0] == 2);
+      return mockQuery2;
+    });
+
+    when(snapshot3.docs).thenReturn(reversedList
+        .where((e) => e.data()['age'] > 10)
+        .skip(12)
+        .take(3)
+        .toList());
+    when(mockQuery3.limit(any)).thenAnswer((invocation) {
+      assert(invocation.positionalArguments[0] == 3);
+      return mockQuery3;
+    });
+
+    controller.notifyPageRequestListeners(4);
+
+    await Future.delayed(const Duration(milliseconds: 10));
+
+    // First query 3, 1 (no more items)
+    // Second query: 3, 0 (no more items)
+    // Third query: (no more items)
+
+    expect(controller.error, isNull);
+    expect(controller.itemList, [
+      list[19],
+      list[18],
+      list[17],
+      list[16],
+      list[15],
+      list[14],
+      list[13],
+      list[12],
+      list[11],
+      list[9],
+      list[7],
+      list[6],
+      list[5],
+      list[3],
+      list[1],
+      list[0],
     ]);
     expect(controller.value.nextPageKey, isNull);
   });
