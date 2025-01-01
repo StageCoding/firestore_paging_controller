@@ -80,7 +80,8 @@ class FirestorePagingController<ItemType>
         ),
         assert(pageSize > 0),
         firestore = firestore ?? FirebaseFirestore.instance,
-        _queryWaitingResults = List.filled(queryBuilders?.length ?? 1, []),
+        _queryWaitingResults =
+            List.generate(queryBuilders?.length ?? 1, (_) => []),
         super(firstPageKey: 0) {
     // If user didn't provide any queryBuilders, we will fetch all items
     queryBuilders ??= [(query) => query];
@@ -136,29 +137,37 @@ class FirestorePagingController<ItemType>
             .values
             .toList();
 
-        // Value of the field we are ordering by in the last document of each cursor
-        final pivotFieldValue = results
-            .map((e) => e.lastOrNull)
-            .whereType<QueryDocumentSnapshot<ItemType>>()
-            .map((e) => e.get(orderBy!))
-            .reduce((value, element) {
-          if (orderByDescending) {
-            return value.compareTo(element) < 0 ? value : element;
-          } else {
-            return value.compareTo(element) > 0 ? value : element;
+        for (var e in _queryWaitingResults) {
+          e.clear();
+        }
+
+        final notExhaustedCursors = results.where((e) => e.length == pageSize);
+
+        if (notExhaustedCursors.isNotEmpty) {
+          // Value of the field we are ordering by in the last document of each cursor
+          final pivotFieldValue = notExhaustedCursors
+              // Get the last document of each cursor, as it is already ordered by firebase
+              .map((e) => e.last)
+              .map((e) => e.get(orderBy!))
+              .reduce((value, element) {
+            if (orderByDescending) {
+              return value.compareTo(element) > 0 ? value : element;
+            } else {
+              return value.compareTo(element) < 0 ? value : element;
+            }
+          });
+
+          for (var i = 0; i < results.length; i++) {
+            final itemsToWait = results[i].where((e) {
+              final value = e.get(orderBy!);
+              return orderByDescending
+                  ? value.compareTo(pivotFieldValue) < 0
+                  : value.compareTo(pivotFieldValue) > 0;
+            }).toList();
+
+            _queryWaitingResults[i].addAll(itemsToWait);
+            results[i].removeWhere((e) => itemsToWait.contains(e));
           }
-        });
-
-        for (var i = 0; i < results.length; i++) {
-          final itemsToWait = results[i].where((e) {
-            final value = e.get(orderBy!);
-            return orderByDescending
-                ? value.compareTo(pivotFieldValue) > 0
-                : value.compareTo(pivotFieldValue) < 0;
-          }).toList();
-
-          _queryWaitingResults[i].addAll(itemsToWait);
-          results[i].removeWhere((e) => itemsToWait.contains(e));
         }
       }
 
@@ -166,9 +175,21 @@ class FirestorePagingController<ItemType>
 
       final newItems = results
           .expand((e) => e)
+          // Remove local duplicates, orderin not preserved but we need to
+          // order anyways after meshing all results
           .toSet()
-          .where((item) => value.itemList?.any((e) => e.id == item.id) != true)
+          // Remove duplicates from already added items, because other queries
+          // may have the same items
+          .where((e) => value.itemList?.every((i) => i.id != e.id) != false)
           .toList();
+
+      if (orderBy != null) {
+        if (orderByDescending) {
+          newItems.sort((a, b) => b.get(orderBy!).compareTo(a.get(orderBy!)));
+        } else {
+          newItems.sort((a, b) => a.get(orderBy!).compareTo(b.get(orderBy!)));
+        }
+      }
 
       if (isLastPage) {
         appendLastPage(newItems);
