@@ -20,7 +20,7 @@ To use this package, you need to create a `FirestorePagingController` and (optio
 ```dart
 import 'package:firestore_paging_controller/firestore_paging_controller.dart';
 
-final controller = FirestorePagingController(
+final controller = FirestorePagingController.withoutType(
   basePath: 'posts',
   queryBuilders: [
     (query) => query.where('creatorId', isEqualTo: userId),
@@ -37,10 +37,44 @@ This will create a controller that will paginate through the items that have the
 After creating the controller, you can use it in a widget from the [`infinite_scroll_pagination`](https://pub.dev/packages/infinite_scroll_pagination) package. Here is an example:
 
 ```dart
-PagedListView<int, T>(
+PagedListView(
   pagingController: controller,
-  builderDelegate: CustomPagedChildBuilderDelegate<T>(
-    itemBuilder: (context, item, index) => Post(item),
+  builderDelegate: PagedChildBuilderDelegate<QueryDocumentSnapshot<Map<String, dynamic>>>(
+    itemBuilder: (context, snapshot, index) => Post(snapshot.data()),
   ),
 );
 ```
+
+If you want to use the type-safe version of the controller, you can do the following:
+
+```dart
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firestore_paging_controller/firestore_paging_controller.dart';
+
+final controller = FirestorePagingController<PostModel>.converted(
+  basePath: 'posts',
+  queryBuilders: [
+    (query) => query.where('creatorId', isEqualTo: userId),
+    (query) => query.where('taggedUserId', isEqualTo: userId),
+  ],
+  orderBy: 'createdAt',
+  orderByDescending: true,
+  pageSize: 10,
+  fromMap: (data) => PostModel.fromMap(data),
+);
+```
+
+Then it can be used like this:
+
+```dart
+PagedListView<int, QueryDocumentSnapshot<T>>(
+  pagingController: controller,
+  builderDelegate: PagedChildBuilderDelegate<QueryDocumentSnapshot<T>>(
+    itemBuilder: (context, snapshot, index) => Post(snapshot.data()),
+  ),
+);
+```
+
+## Reminders:
+- The queries you pass to the controller should not have any limit or orderBy applied to them.
+- You may need to create an index in Firestore for the queries you are using in the controller. Look at the logs for the error message and create the index accordingly.
